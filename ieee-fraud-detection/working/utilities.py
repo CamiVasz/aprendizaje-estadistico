@@ -1,7 +1,7 @@
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-def plot_counts_and_proportion(table, x, hue, n_most_common=4):
+def plot_counts_and_proportion(table, x, hue, n_most_common=4, savefig=False,figname=""):
     '''
     Function that plots
     inputs:
@@ -31,4 +31,9 @@ def plot_counts_and_proportion(table, x, hue, n_most_common=4):
     chart = sns.countplot(x=x, data=df, ax=axes[0], order=order)
     chart.set_xticklabels(chart.get_xticklabels(), rotation=90)
     
+    
+    if savefig:
+        if not figname:
+            figname = f"./imgs/created/relation_{x}.png"
+        f.savefig(figname)
     return f
