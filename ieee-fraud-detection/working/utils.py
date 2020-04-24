@@ -73,12 +73,33 @@ def read_train_transaction(nrows = 30000,folder_path = None,
         y_acc = y_acc[: nrows]
         return X_acc, y_acc
 
-
+def get_categorical_from_df(X):
+    '''
+    This function receives a complete or incomplete train transaction df
+    And return its categorical values.
+    Inputs:
+        X (pandas dataframe)
+    Outputs:
         
-
-
-
-
+        cat_X:
+            The indexes of categorical values in columns
+        cont_X:
+            The other indexes 
+    '''
+    categorical_cols = set(['ProductCD',
+                   *[f'card{i}' for i in range(1,7)],
+                   *[f'M{i}' for i in range(1,10)],
+                   'P_emaildomain', 'R_emaildomain', 'addr1', 'addr2'])
+    
+    cat_X = []
+    cont_X = []
+    for i, col in enumerate(X):
+        if col in categorical_cols:
+            cat_X.append(i)
+        else:
+            cont_X.append(i)
+            
+    return cat_X, cont_X
 
 def plot_counts_and_proportion(table, x, hue, n_most_common=4, savefig=False,figname=""):
     '''
