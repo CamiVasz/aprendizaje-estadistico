@@ -1,5 +1,6 @@
 import seaborn as sns
 import matplotlib.pyplot as plt
+from sklearn.impute import SimpleImputer
 import numpy as np
 import pandas as pd
 
@@ -144,3 +145,46 @@ def plot_counts_and_proportion(table, x, hue, n_most_common=4, savefig=False,fig
             figname = f"./imgs/created/relation_{x}.pdf"
         f.savefig(figname, bbox_inches='tight')
     return f
+
+def preprocessing(Xf):
+    '''
+    This function receives a complete or incomplete train transaction df
+    And returns a preprocessed DataFrame with:
+        - No NaN values
+        - Categorical variables coded
+        - Missing indicator for NaN values
+    Inputs:
+        X (pandas dataframe)
+    Outputs:        
+        X (pandas dataframe)
+    '''
+    X = Xf
+    # Extracting categorical variables
+    cat, con = get_categorical_from_df(X)
+    categorical_vars = X.columns[cat]
+    # Coding categorical variables (ignoring NaN)
+    df_raw = X[categorical_vars]
+    df_temp = df_raw.astype("category").apply(lambda x: x.cat.codes)
+    X[categorical_vars] = df_temp.where(~df_raw.isna(), df_raw)
+    continuous_vars = X.columns.difference(categorical_vars)
+    # Inputing nan
+    # Mean for the continous variables 
+    # Mode for the categorical variables
+    cat_nan = []
+    for i in categorical_vars:
+        if any(pd.isnull(X[i])):
+            cat_nan.append(i + 'isnan')
+    con_nan = []
+    for i in continuous_vars:
+        if any(np.isnan(X[i])):
+            con_nan.append(i + 'isnan')
+    imp_mean = SimpleImputer(missing_values=np.nan, strategy='mean', add_indicator = True)
+    imp_mode = SimpleImputer(missing_values=np.nan, strategy='most_frequent', add_indicator = True)
+    X_cat = imp_mode.fit_transform(X.loc[:,categorical_vars])
+    X_cont = imp_mean.fit_transform(X.loc[:,continuous_vars])
+    X_nan_cat = pd.DataFrame(X_cat[:, len(categorical_vars):], columns = cat_nan)
+    X_nan_cont = pd.DataFrame(X_cont[:, len(continuous_vars):], columns = con_nan)
+    X.loc[:,categorical_vars] = X_cat[:, 0:len(categorical_vars)]
+    X.loc[:,continuous_vars] = X_cont[:, 0:len(continuous_vars)]
+    Xd = pd.concat([X, X_nan_cat, X_nan_cont], axis = 1)
+    return Xd
