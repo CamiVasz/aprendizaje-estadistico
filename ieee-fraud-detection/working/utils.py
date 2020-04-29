@@ -38,8 +38,8 @@ def read_train_transaction(nrows = 30000,folder_path = None,
         return X_r, y_r
 
     if not folder_path:
-        folder_path = '~/Documents/Proyects/aprendizaje-estadistico/' \
-                       + 'ieee-fraud-detection/input/'
+        folder_path = ''
+        
     file_path = folder_path + 'train_transaction.csv'
 
     if not undersampling:
@@ -182,8 +182,8 @@ def preprocessing(Xf):
     imp_mode = SimpleImputer(missing_values=np.nan, strategy='most_frequent', add_indicator = True)
     X_cat = imp_mode.fit_transform(X.loc[:,categorical_vars])
     X_cont = imp_mean.fit_transform(X.loc[:,continuous_vars])
-    X_nan_cat = pd.DataFrame(X_cat[:, len(categorical_vars):], columns = cat_nan)
-    X_nan_cont = pd.DataFrame(X_cont[:, len(continuous_vars):], columns = con_nan)
+    X_nan_cat = pd.DataFrame(X_cat[:, len(categorical_vars):], columns = cat_nan, index = X.index)
+    X_nan_cont = pd.DataFrame(X_cont[:, len(continuous_vars):], columns = con_nan, index = X.index)
     X.loc[:,categorical_vars] = X_cat[:, 0:len(categorical_vars)]
     X.loc[:,continuous_vars] = X_cont[:, 0:len(continuous_vars)]
     Xd = pd.concat([X, X_nan_cat, X_nan_cont], axis = 1)
