@@ -90,7 +90,8 @@ def get_categorical_from_df(X):
     categorical_cols = set(['ProductCD',
                    *[f'card{i}' for i in range(1,7)],
                    *[f'M{i}' for i in range(1,10)],
-                   'P_emaildomain', 'R_emaildomain', 'addr1', 'addr2'])
+                   'P_emaildomain', 'R_emaildomain', 'addr1', 'addr2',
+                   'P_email1', 'P_email2', 'R_email1', 'R_email2'])
     
     cat_X = []
     cont_X = []
@@ -146,7 +147,8 @@ def plot_counts_and_proportion(table, x, hue, n_most_common=4, savefig=False,fig
         f.savefig(figname, bbox_inches='tight')
     return f
 
-def preprocessing(Xf):
+def preprocessing(Xf, create_features_props_over_cats = False, 
+                    group_cat_prop=True):
     '''
     This function receives a complete or incomplete train transaction df
     And returns a preprocessed DataFrame with:
@@ -155,10 +157,28 @@ def preprocessing(Xf):
         - Missing indicator for NaN values
     Inputs:
         X (pandas dataframe)
+        create_proportion_over_cats (bool)
+            defines if these new features are added
+        group_cat_prop (bool)
+            group some categorical features with less than some value
     Outputs:        
         X (pandas dataframe)
     '''
     X = Xf
+
+    ## Mandatory transofmations
+
+    # #  Separate mails in different cols
+    # X[['P_email1', 'P_email2']] =  names_and_domains(X['P_emaildomain'])
+    # X.drop('P_emaildomain', axis=1, inplace=True)
+
+    # X[['R_email1', 'R_email2']] =  names_and_domains(X['R_emaildomain'])
+    # X.drop('R_emaildomain', axis=1, inplace=True)
+
+    # # Apply logratim to transaction
+    # X['LogTransactionAmt'] = np.log(X['TransactionAmt'])
+
+
     # Extracting categorical variables
     cat, con = get_categorical_from_df(X)
     categorical_vars = X.columns[cat]
@@ -187,4 +207,95 @@ def preprocessing(Xf):
     X.loc[:,categorical_vars] = X_cat[:, 0:len(categorical_vars)]
     X.loc[:,continuous_vars] = X_cont[:, 0:len(continuous_vars)]
     Xd = pd.concat([X, X_nan_cat, X_nan_cont], axis = 1)
+
+
+
+    ##  Create proportions
+    if create_features_props_over_cats:
+        from itertools import product
+        # Define the new columns to be transformed
+        cols = ['TransactionAmt']
+
+        ests = ['mean', 'std'] # or ['median', 'std']
+
+        cats = ['card1', 'card2', 'card4', 'card6']
+        cats = [*cats, 'M1', 'M2', 'M3', 'M4', 'M5', 'M6'] # Nan propagation?
+        cats = [*cats, 'addr1', 'addr2']
+
+        # Perform transformation
+        for col, cat, est in product(cols, cats, ests):
+            # if col, cat in Xd?
+            Xd[f'{col}_to_{est}_{cat}'] = prop_col_over_est_category(Xd, col, cat, est)
+
+        
+
+    ## Group categories that have less than 1% or values
+    if group_cat_prop:
+        prop = 0.01
+        cat, __ = get_categorical_from_df(Xd)
+        categorical_vars = Xd.columns[cat]
+        for cat in categorical_vars:
+            Xd[cat] = group_small_cats_inplace(Xd[cat], prop=prop)
+
     return Xd
+
+
+def prop_col_over_est_category(X, col, cat, est='mean'):
+    '''
+    Retorna una columna de tamaño X[col], de tal manera
+    que sus componentes son
+     X[col] / (estimador de X[col] en la categoria utilizada en X[cat].()
+     
+     WARNINGS:
+         Usar est = 'std' puede propagar NaN si solo hay un elemento en cat.
+     
+     Inputs:
+         X:
+             Pandas dataframe
+        col:
+            column in X
+        cat:
+            Column in X, category
+        est:
+            Transformation utilizaed un df.groupby().transform
+            Can be median mean or std
+    Outputs:
+        S: Pandas series
+            as described above
+    '''
+    # Transform('mean') is diff to .mean()
+    # Transform returns a df of equal size,
+    # .mean() groups by 
+    S = X[col] / X.groupby([cat])[col].transform(est)
+    return S
+
+def names_and_domains(mails):
+    df = mails.str.split('.', expand=True)
+    # We are translating the middle to last column rows in ['outlook', 'com', NaN]
+    # But not columns in ['outlook', 'com', 'es']
+    df[2].fillna(df[1], inplace=True)
+    return df.drop(1, axis=1)
+
+def group_small_cats_inplace(serie, prop=0.1):
+    value_counts = serie.value_counts()
+    # if we have less than 3 categories this is not useful
+    if len(value_counts) <  3:
+        return serie
+    
+    # Check type
+    type_col = serie.dtype
+    if  np.issubdtype(type_col, np.integer):
+        import warnings
+        warnings.warn("Float type is unexpected in category grouping. Please cast\
+                        before to a object type or int")
+        
+    # Filter the grouped cats
+    min_required = prop * len(serie)
+    non_passing = value_counts[value_counts < min_required].index
+    # If is object input others else input -1
+    if type_col == 'O':
+        serie.loc[ serie.isin(non_passing)] = 'Others'
+    else:
+        # If not, please be int, and please not be using -1
+        serie.loc[ serie.isin(non_passing)] = -1
+    return serie
