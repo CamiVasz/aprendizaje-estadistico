@@ -93,7 +93,9 @@ def get_categorical_from_df(X):
                    *[f'card{i}' for i in range(1,7)],
                    *[f'M{i}' for i in range(1,10)],
                    'P_emaildomain', 'R_emaildomain', 'addr1', 'addr2',
-                   'P_email1', 'P_email2', 'R_email1', 'R_email2'])
+                   'P_email1', 'P_email2', 'R_email1', 'R_email2',
+                    '_Weekdays', '_Hours', '_Days' ,
+    ])
     
     cat_X = []
     cont_X = []
@@ -175,6 +177,7 @@ def preprocessing(Xf, yf, detect_outliers = False, convert_DT = False,
     ## Mandatory transofmations
 
     #  Separate mails in different cols
+    # [TODO] fix this
     # X[['P_email1', 'P_email2']] =  names_and_domains(X['P_emaildomain'])
     # X.drop('P_emaildomain', axis=1, inplace=True)
 
@@ -219,7 +222,6 @@ def preprocessing(Xf, yf, detect_outliers = False, convert_DT = False,
         Xd, yd = outlier_detection(Xd, yd)
 
     ## Create_Delta time
-    # [TODO] add this created features to categorical
     if convert_DT:
         Xd = convert_delta_time(Xd)
 
@@ -300,7 +302,7 @@ def group_small_cats_inplace(serie, prop=0.1):
     
     # Check type
     type_col = serie.dtype
-    if  np.issubdtype(type_col, np.integer):
+    if  np.issubdtype(type_col, np.float):
         import warnings
         warnings.warn("Float type is unexpected in category grouping. Please cast\
                         before to a object type or int")
@@ -328,9 +330,9 @@ def convert_delta_time(X):
     df_trans = X
     START_DATE = '2017-12-01'
     startdate = datetime.datetime.strptime(START_DATE, "%Y-%m-%d")
-    df_trans["Date"] = df_trans['TransactionDT'].apply(lambda x: (startdate + datetime.timedelta(seconds=x)))
+    date = df_trans['TransactionDT'].apply(lambda x: (startdate + datetime.timedelta(seconds=x)))
 
-    df_trans['_Weekdays'] = df_trans['Date'].dt.dayofweek
-    df_trans['_Hours'] = df_trans['Date'].dt.hour
-    df_trans['_Days'] = df_trans['Date'].dt.day
+    df_trans['_Weekdays'] = date.dt.dayofweek
+    df_trans['_Hours'] = date.dt.hour
+    df_trans['_Days'] = date.dt.day
     return df_trans
