@@ -1,8 +1,10 @@
 import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.impute import SimpleImputer
+from sklearn.ensemble import IsolationForest
 import numpy as np
 import pandas as pd
+import datetime
 
 def read_train_transaction(nrows = 30000,folder_path = None, 
                     undersampling = False, RandomState=10):
@@ -38,8 +40,8 @@ def read_train_transaction(nrows = 30000,folder_path = None,
         return X_r, y_r
 
     if not folder_path:
-        folder_path = '~/Documents/Proyects/aprendizaje-estadistico/' \
-                       + 'ieee-fraud-detection/input/'
+        folder_path = ''
+        
     file_path = folder_path + 'train_transaction.csv'
 
     if not undersampling:
@@ -147,14 +149,17 @@ def plot_counts_and_proportion(table, x, hue, n_most_common=4, savefig=False,fig
         f.savefig(figname, bbox_inches='tight')
     return f
 
-def preprocessing(Xf, create_features_props_over_cats = False, 
-                    group_cat_prop=True):
+
+def preprocessing(Xf, yf, detect_outliers = False, convert_DT = False,
+            create_features_props_over_cats = False, group_cat_prop=True):
     '''
     This function receives a complete or incomplete train transaction df
+    alog with its respective labels.
     And returns a preprocessed DataFrame with:
         - No NaN values
         - Categorical variables coded
         - Missing indicator for NaN values
+        - No outliers (if indicated)
     Inputs:
         X (pandas dataframe)
         create_proportion_over_cats (bool)
@@ -162,7 +167,7 @@ def preprocessing(Xf, create_features_props_over_cats = False,
         group_cat_prop (bool)
             group some categorical features with less than some value
     Outputs:        
-        X (pandas dataframe)
+        X, y (pandas dataframe)
     '''
     X = Xf
 
@@ -202,13 +207,20 @@ def preprocessing(Xf, create_features_props_over_cats = False,
     imp_mode = SimpleImputer(missing_values=np.nan, strategy='most_frequent', add_indicator = True)
     X_cat = imp_mode.fit_transform(X.loc[:,categorical_vars])
     X_cont = imp_mean.fit_transform(X.loc[:,continuous_vars])
-    X_nan_cat = pd.DataFrame(X_cat[:, len(categorical_vars):], columns = cat_nan)
-    X_nan_cont = pd.DataFrame(X_cont[:, len(continuous_vars):], columns = con_nan)
+    X_nan_cat = pd.DataFrame(X_cat[:, len(categorical_vars):], columns = cat_nan, index = X.index)
+    X_nan_cont = pd.DataFrame(X_cont[:, len(continuous_vars):], columns = con_nan, index = X.index)
     X.loc[:,categorical_vars] = X_cat[:, 0:len(categorical_vars)]
     X.loc[:,continuous_vars] = X_cont[:, 0:len(continuous_vars)]
     Xd = pd.concat([X, X_nan_cat, X_nan_cont], axis = 1)
 
+    ## Outlier detection
+    if detect_outliers:
+        Xd, yd = outlier_detection(Xd, yd)
 
+    ## Create_Delta time
+    # [TODO] add this created features to categorical
+    if convert_DT:
+        Xd = convert_delta_time(Xd)
 
     ##  Create proportions
     if create_features_props_over_cats:
@@ -227,8 +239,6 @@ def preprocessing(Xf, create_features_props_over_cats = False,
             # if col, cat in Xd?
             Xd[f'{col}_to_{est}_{cat}'] = prop_col_over_est_category(Xd, col, cat, est)
 
-        
-
     ## Group categories that have less than 1% or values
     if group_cat_prop:
         prop = 0.01
@@ -237,7 +247,8 @@ def preprocessing(Xf, create_features_props_over_cats = False,
         for cat in categorical_vars:
             Xd[cat] = group_small_cats_inplace(Xd[cat], prop=prop)
 
-    return Xd
+    return Xd, yd
+
 
 
 def prop_col_over_est_category(X, col, cat, est='mean'):
@@ -299,3 +310,22 @@ def group_small_cats_inplace(serie, prop=0.1):
         # If not, please be int, and please not be using -1
         serie.loc[ serie.isin(non_passing)] = -1
     return serie
+
+def outlier_detection(X, y):
+    clf = IsolationForest(n_estimators=20)
+    clf.fit(X)  # fit the added trees  
+    ind = clf.predict(X) > 0
+    X_no = X.loc[ind]
+    y_no = y.loc[ind]
+    return X_no, y_no
+
+def convert_delta_time(X):
+    df_trans = X
+    START_DATE = '2017-12-01'
+    startdate = datetime.datetime.strptime(START_DATE, "%Y-%m-%d")
+    df_trans["Date"] = df_trans['TransactionDT'].apply(lambda x: (startdate + datetime.timedelta(seconds=x)))
+
+    df_trans['_Weekdays'] = df_trans['Date'].dt.dayofweek
+    df_trans['_Hours'] = df_trans['Date'].dt.hour
+    df_trans['_Days'] = df_trans['Date'].dt.day
+    return df_trans
