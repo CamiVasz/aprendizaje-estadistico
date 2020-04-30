@@ -170,18 +170,19 @@ def preprocessing(Xf, yf, detect_outliers = False, convert_DT = False,
         X, y (pandas dataframe)
     '''
     X = Xf
+    yd = yf
 
     ## Mandatory transofmations
 
-    # #  Separate mails in different cols
+    #  Separate mails in different cols
     # X[['P_email1', 'P_email2']] =  names_and_domains(X['P_emaildomain'])
     # X.drop('P_emaildomain', axis=1, inplace=True)
 
     # X[['R_email1', 'R_email2']] =  names_and_domains(X['R_emaildomain'])
     # X.drop('R_emaildomain', axis=1, inplace=True)
 
-    # # Apply logratim to transaction
-    # X['LogTransactionAmt'] = np.log(X['TransactionAmt'])
+    # Apply logratim to transaction
+    X['LogTransactionAmt'] = np.log(X['TransactionAmt'])
 
 
     # Extracting categorical variables
@@ -241,11 +242,11 @@ def preprocessing(Xf, yf, detect_outliers = False, convert_DT = False,
 
     ## Group categories that have less than 1% or values
     if group_cat_prop:
-        prop = 0.01
+        prop = 0.05
         cat, __ = get_categorical_from_df(Xd)
         categorical_vars = Xd.columns[cat]
         for cat in categorical_vars:
-            Xd[cat] = group_small_cats_inplace(Xd[cat], prop=prop)
+            Xd.loc[:, cat] = group_small_cats_inplace(Xd[cat], prop=prop)
 
     return Xd, yd
 
@@ -288,6 +289,10 @@ def names_and_domains(mails):
     return df.drop(1, axis=1)
 
 def group_small_cats_inplace(serie, prop=0.1):
+    # [TODO]
+    # Esto está mal, el warning que me estaba saliendo no importa
+    from copy import deepcopy
+    serie = deepcopy(serie)
     value_counts = serie.value_counts()
     # if we have less than 3 categories this is not useful
     if len(value_counts) <  3:
