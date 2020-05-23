@@ -4,3 +4,4 @@ ieee-fraud-detection/working/imgs/
 ieee-fraud-detection/working/__pycache__/
 *\.ipynb_checkpoints/
 *\.vscode
+course/*
