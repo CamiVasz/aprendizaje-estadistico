@@ -153,7 +153,8 @@ def plot_counts_and_proportion(table, x, hue, n_most_common=4, savefig=False,fig
 
 
 def preprocessing(Xf, yf, detect_outliers = False, convert_DT = False,
-            create_features_props_over_cats = False, group_cat_prop=True):
+            create_features_props_over_cats = False, group_cat_prop=True,
+            is_nan_indicators=True):
     '''
     This function receives a complete or incomplete train transaction df
     alog with its respective labels.
@@ -204,22 +205,26 @@ def preprocessing(Xf, yf, detect_outliers = False, convert_DT = False,
     # Mean for the continous variables 
     # Mode for the categorical variables
     cat_nan = []
-    for i in categorical_vars:
-        if any(pd.isnull(X[i])):
-            cat_nan.append(i + 'isnan')
-    con_nan = []
-    for i in continuous_vars:
-        if any(np.isnan(X[i])):
-            con_nan.append(i + 'isnan')
-    imp_mean = SimpleImputer(missing_values=np.nan, strategy='mean', add_indicator = True)
-    imp_mode = SimpleImputer(missing_values=np.nan, strategy='most_frequent', add_indicator = True)
+    if is_nan_indicators:
+        for i in categorical_vars:
+            if any(pd.isnull(X[i])):
+                cat_nan.append(i + 'isnan')
+        con_nan = []
+        for i in continuous_vars:
+            if any(np.isnan(X[i])):
+                con_nan.append(i + 'isnan')
+    imp_mean = SimpleImputer(missing_values=np.nan, strategy='mean', add_indicator = is_nan_indicators)
+    imp_mode = SimpleImputer(missing_values=np.nan, strategy='most_frequent', add_indicator = is_nan_indicators)
     X_cat = imp_mode.fit_transform(X.loc[:,categorical_vars])
     X_cont = imp_mean.fit_transform(X.loc[:,continuous_vars])
-    X_nan_cat = pd.DataFrame(X_cat[:, len(categorical_vars):], columns = cat_nan, index = X.index)
-    X_nan_cont = pd.DataFrame(X_cont[:, len(continuous_vars):], columns = con_nan, index = X.index)
     X.loc[:,categorical_vars] = X_cat[:, 0:len(categorical_vars)]
     X.loc[:,continuous_vars] = X_cont[:, 0:len(continuous_vars)]
-    Xd = pd.concat([X, X_nan_cat, X_nan_cont], axis = 1)
+    if is_nan_indicators:
+        X_nan_cat = pd.DataFrame(X_cat[:, len(categorical_vars):], columns = cat_nan, index = X.index)
+        X_nan_cont = pd.DataFrame(X_cont[:, len(continuous_vars):], columns = con_nan, index = X.index)
+        Xd = pd.concat([X, X_nan_cat, X_nan_cont], axis = 1)
+    else:
+        Xd = X
 
     ## Outlier detection
     if detect_outliers:
