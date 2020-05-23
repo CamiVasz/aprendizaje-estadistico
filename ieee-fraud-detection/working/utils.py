@@ -163,11 +163,13 @@ def preprocessing(Xf, yf, detect_outliers = False, convert_DT = False,
         - Missing indicator for NaN values
         - No outliers (if indicated)
     Inputs:
-        X (pandas dataframe)
+        Xf, yf (pandas dataframe):
+            That represent data
         create_proportion_over_cats (bool)
             defines if these new features are added
         group_cat_prop (bool)
-            group some categorical features with less than some value
+            group some categorical features with less than some fixed propotion
+
     Outputs:        
         X, y (pandas dataframe)
     '''
@@ -178,11 +180,13 @@ def preprocessing(Xf, yf, detect_outliers = False, convert_DT = False,
 
     #  Separate mails in different cols
     # [TODO] fix this
-    # X[['P_email1', 'P_email2']] =  names_and_domains(X['P_emaildomain'])
-    # X.drop('P_emaildomain', axis=1, inplace=True)
+    if 'P_emaildomain' in X:
+        X[['P_email1', 'P_email2']] =  names_and_domains(X['P_emaildomain'])
+        X.drop('P_emaildomain', axis=1, inplace=True)
 
-    # X[['R_email1', 'R_email2']] =  names_and_domains(X['R_emaildomain'])
-    # X.drop('R_emaildomain', axis=1, inplace=True)
+    if 'R_emaildomain' in X:
+        X[['R_email1', 'R_email2']] =  names_and_domains(X['R_emaildomain'])
+        X.drop('R_emaildomain', axis=1, inplace=True)
 
     # Apply logratim to transaction
     X['LogTransactionAmt'] = np.log(X['TransactionAmt'])
@@ -287,19 +291,22 @@ def names_and_domains(mails):
     df = mails.str.split('.', expand=True)
     # We are translating the middle to last column rows in ['outlook', 'com', NaN]
     # But not columns in ['outlook', 'com', 'es']
+    # Fill column 2 with values in column 1
+    # This is to always get last domain
     df[2].fillna(df[1], inplace=True)
+    df.fillna(np.nan, inplace=True)
     return df.drop(1, axis=1)
 
 def group_small_cats_inplace(serie, prop=0.1):
     # [TODO]
-    # Esto está mal, el warning que me estaba saliendo no importa
+    # HAcer copia no deberia ser necesario
+    # el warning que me estaba saliendo no deberia importar
     from copy import deepcopy
     serie = deepcopy(serie)
     value_counts = serie.value_counts()
     # if we have less than 3 categories this is not useful
     if len(value_counts) <  3:
         return serie
-    
     # Check type
     type_col = serie.dtype
     if  np.issubdtype(type_col, np.float):
@@ -312,7 +319,8 @@ def group_small_cats_inplace(serie, prop=0.1):
     non_passing = value_counts[value_counts < min_required].index
     # If is object input others else input -1
     if type_col == 'O':
-        serie.loc[ serie.isin(non_passing)] = 'Others'
+        # Column type object
+        serie.loc[ serie.isin(non_passing)] = ''
     else:
         # If not, please be int, and please not be using -1
         serie.loc[ serie.isin(non_passing)] = -1
