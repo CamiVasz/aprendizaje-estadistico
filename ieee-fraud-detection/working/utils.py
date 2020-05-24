@@ -1,10 +1,12 @@
-import seaborn as sns
-import matplotlib.pyplot as plt
-from sklearn.impute import SimpleImputer
-from sklearn.ensemble import IsolationForest
 import numpy as np
 import pandas as pd
 import datetime
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+from sklearn.impute import SimpleImputer
+from sklearn.ensemble import IsolationForest
+from sklearn.preprocessing import LabelEncoder
 
 def read_train_transaction(nrows = 30000,folder_path = None, 
                     undersampling = False, RandomState=10):
@@ -154,7 +156,7 @@ def plot_counts_and_proportion(table, x, hue, n_most_common=4, savefig=False,fig
 
 def preprocessing(Xf, yf, detect_outliers = False, convert_DT = False,
             create_features_props_over_cats = False, group_cat_prop=True,
-            is_nan_indicators=True):
+            is_nan_indicators=True, imputation='centrality', mand_transf=False):
     '''
     This function receives a complete or incomplete train transaction df
     alog with its respective labels.
@@ -170,6 +172,8 @@ def preprocessing(Xf, yf, detect_outliers = False, convert_DT = False,
             defines if these new features are added
         group_cat_prop (bool)
             group some categorical features with less than some fixed propotion
+        imputation (string or False)
+            can be one of following values 'centrality', 'new_category' and False
 
     Outputs:        
         X, y (pandas dataframe)
@@ -178,53 +182,78 @@ def preprocessing(Xf, yf, detect_outliers = False, convert_DT = False,
     yd = yf
 
     ## Mandatory transofmations
+    if mand_transf:
+        if 'P_emaildomain' in X:
+            X[['P_email1', 'P_email2']] =  names_and_domains(X['P_emaildomain'])
+            X.drop('P_emaildomain', axis=1, inplace=True)
 
-    #  Separate mails in different cols
-    # [TODO] fix this
-    if 'P_emaildomain' in X:
-        X[['P_email1', 'P_email2']] =  names_and_domains(X['P_emaildomain'])
-        X.drop('P_emaildomain', axis=1, inplace=True)
+        if 'R_emaildomain' in X:
+            X[['R_email1', 'R_email2']] =  names_and_domains(X['R_emaildomain'])
+            X.drop('R_emaildomain', axis=1, inplace=True)
 
-    if 'R_emaildomain' in X:
-        X[['R_email1', 'R_email2']] =  names_and_domains(X['R_emaildomain'])
-        X.drop('R_emaildomain', axis=1, inplace=True)
+        # Apply logratim to transaction
+        X['LogTransactionAmt'] = np.log(X['TransactionAmt'])
 
-    # Apply logratim to transaction
-    X['LogTransactionAmt'] = np.log(X['TransactionAmt'])
+    Xd = X
+    if imputation == 'centrality':
+        # Extracting categorical variables
+        cat, con = get_categorical_from_df(X)
+        categorical_vars = X.columns[cat]
+        # Coding categorical variables (ignoring NaN)
+        df_raw = X[categorical_vars]
+        df_temp = df_raw.astype("category").apply(lambda x: x.cat.codes)
+        X[categorical_vars] = df_temp.where(~df_raw.isna(), df_raw)
+        continuous_vars = X.columns.difference(categorical_vars)
+        # Inputing nan
+        # Mean for the continous variables 
+        # Mode for the categorical variables
+        if is_nan_indicators:
+            # Create cols names
+            cat_nan = []
+            for i in categorical_vars:
+                if any(pd.isnull(X[i])):
+                    cat_nan.append(i + 'isnan')
+            con_nan = []
+            for i in continuous_vars:
+                if any(np.isnan(X[i])):
+                    con_nan.append(i + 'isnan')
+        imp_mean = SimpleImputer(missing_values=np.nan, strategy='mean', add_indicator=is_nan_indicators)
+        imp_mode = SimpleImputer(missing_values=np.nan, strategy='most_frequent', add_indicator=is_nan_indicators)
+        X_cat = imp_mode.fit_transform(X.loc[:,categorical_vars])
+        X_cont = imp_mean.fit_transform(X.loc[:,continuous_vars])
+        X.loc[:,categorical_vars] = X_cat[:, 0:len(categorical_vars)]
+        X.loc[:,continuous_vars] = X_cont[:, 0:len(continuous_vars)]
+        X[categorical_vars] = X[categorical_vars].astype('int')
+        if is_nan_indicators:
+            # 
+            X_nan_cat = pd.DataFrame(X_cat[:, len(categorical_vars):].astype('int'), columns = cat_nan, index = X.index)
+            X_nan_cont = pd.DataFrame(X_cont[:, len(continuous_vars):].astype('int'), columns = con_nan, index = X.index)
+            Xd = pd.concat([X, X_nan_cat, X_nan_cont], axis = 1)
+        else:
+            Xd = X
 
+    elif imputation == 'new_category':
+        # Enconde variables
+        cat, con = get_categorical_from_df(Xd)
+        categorical_vars = Xd.columns[cat]
+        for col in categorical_vars:
+            le = LabelEncoder()
+            # transform all
+            Xd.loc[:, col] = le.fit_transform(Xd.loc[:, col].astype(str))
+            Xd.loc[:, col] =  Xd.loc[:, col].astype('int8')
 
-    # Extracting categorical variables
-    cat, con = get_categorical_from_df(X)
-    categorical_vars = X.columns[cat]
-    # Coding categorical variables (ignoring NaN)
-    df_raw = X[categorical_vars]
-    df_temp = df_raw.astype("category").apply(lambda x: x.cat.codes)
-    X[categorical_vars] = df_temp.where(~df_raw.isna(), df_raw)
-    continuous_vars = X.columns.difference(categorical_vars)
-    # Inputing nan
-    # Mean for the continous variables 
-    # Mode for the categorical variables
-    cat_nan = []
-    if is_nan_indicators:
-        for i in categorical_vars:
-            if any(pd.isnull(X[i])):
-                cat_nan.append(i + 'isnan')
-        con_nan = []
-        for i in continuous_vars:
-            if any(np.isnan(X[i])):
-                con_nan.append(i + 'isnan')
-    imp_mean = SimpleImputer(missing_values=np.nan, strategy='mean', add_indicator = is_nan_indicators)
-    imp_mode = SimpleImputer(missing_values=np.nan, strategy='most_frequent', add_indicator = is_nan_indicators)
-    X_cat = imp_mode.fit_transform(X.loc[:,categorical_vars])
-    X_cont = imp_mean.fit_transform(X.loc[:,continuous_vars])
-    X.loc[:,categorical_vars] = X_cat[:, 0:len(categorical_vars)]
-    X.loc[:,continuous_vars] = X_cont[:, 0:len(continuous_vars)]
-    if is_nan_indicators:
-        X_nan_cat = pd.DataFrame(X_cat[:, len(categorical_vars):], columns = cat_nan, index = X.index)
-        X_nan_cont = pd.DataFrame(X_cont[:, len(continuous_vars):], columns = con_nan, index = X.index)
-        Xd = pd.concat([X, X_nan_cat, X_nan_cont], axis = 1)
     else:
-        Xd = X
+        # Transforming categorical leaving the others at the same
+        cat, con = get_categorical_from_df(Xd)
+        categorical_vars = Xd.columns[cat]
+        for col in categorical_vars:
+            le = LabelEncoder()
+            # transform not NaNs
+            not_nan = ~ Xd[col].isna()
+            Xd.loc[not_nan, col] = le.fit_transform(Xd.loc[not_nan, col])
+            # Put nans in -1
+            Xd.loc[~not_nan, col] = -1
+            Xd.loc[:, col] =  Xd.loc[:, col].astype('int8')
 
     ## Outlier detection
     if detect_outliers:
@@ -260,8 +289,6 @@ def preprocessing(Xf, yf, detect_outliers = False, convert_DT = False,
             Xd.loc[:, cat] = group_small_cats_inplace(Xd[cat], prop=prop)
 
     return Xd, yd
-
-
 
 def prop_col_over_est_category(X, col, cat, est='mean'):
     '''
