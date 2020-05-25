@@ -37,12 +37,6 @@ def read_train_transaction(nrows = 30000,folder_path = None,
         y = train_trans['isFraud']
         return X, y
 
-    def undersample_keep_ind(rus, X, y):
-        X_r, y_r = rus.fit_resample(X, y)
-        X_r.index = X.index[rus.sample_indices_]
-        y_r.index = y.index[rus.sample_indices_]
-        return X_r, y_r
-
     if not folder_path:
         folder_path = ''
         
@@ -59,7 +53,7 @@ def read_train_transaction(nrows = 30000,folder_path = None,
         chunk_size = nrows
         train_transaction_iterator = pd.read_csv( file_path, chunksize=chunk_size, index_col=0)
         # Acc_table to fill with data, the expected number of rows will be nrows
-        X_acc, y_acc = pd.DataFrame(), pd.Series(dtype='int64')
+        X_acc, y_acc = pd.DataFrame(), pd.Series(dtype='int8')
         for table in train_transaction_iterator:
             if len(X_acc)  >= nrows:
                 break
