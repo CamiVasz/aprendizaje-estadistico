@@ -3,6 +3,7 @@ import pandas as pd
 import datetime
 import seaborn as sns
 import matplotlib.pyplot as plt
+from random import sample
 
 from sklearn.impute import SimpleImputer
 from sklearn.ensemble import IsolationForest
@@ -19,6 +20,7 @@ def read_train_transaction(nrows = 30000,folder_path = None,
             The number of rows to output.
         undersampling (bool):
             True if undersampling is required
+            Assume 1 is the category with low number of samples
         RandomState (int):
             Random state to undersampling generator
 
@@ -52,11 +54,8 @@ def read_train_transaction(nrows = 30000,folder_path = None,
         return X, y
 
     else:
-        from imblearn.under_sampling import RandomUnderSampler
-        
         # Data will be readed from chuncks to ensure not to overload memory 
         # and return requested size of data
-        rus = RandomUnderSampler(random_state=RandomState)
         chunk_size = nrows
         train_transaction_iterator = pd.read_csv( file_path, chunksize=chunk_size, index_col=0)
         # Acc_table to fill with data, the expected number of rows will be nrows
@@ -66,16 +65,18 @@ def read_train_transaction(nrows = 30000,folder_path = None,
                 break
             # get X, y
             X, y = get_X_y(table)
-            
             # Undersample X, y, keep indexes
-            X_resampled, y_resampled = undersample_keep_ind(rus, X, y)
-            
+            index_trues = y[y == 1].index
+            poss_falses = set(y.index).difference(index_trues)
+            index_falses = sample(poss_falses, len(index_trues))
+            X_trues, y_trues = X.loc[index_trues], y.loc[index_trues]
+            X_falses, y_falses = X.loc[index_falses], y.loc[index_falses]
             # Accumulate
-            X_acc = pd.concat([X_acc, X_resampled])
-            y_acc = pd.concat([y_acc, y_resampled])
+            X_acc = pd.concat([X_acc, X_trues, X_falses])
+            y_acc = pd.concat([y_acc, y_trues, y_falses])
         # Truncate if neccesary
-        X_acc = X_acc[: nrows]
-        y_acc = y_acc[: nrows]
+        X_acc = X_acc.sample(frac=1)
+        y_acc = y_acc.sample(frac=1)
         return X_acc, y_acc
 
 def get_categorical_from_df(X):
@@ -152,7 +153,6 @@ def plot_counts_and_proportion(table, x, hue, n_most_common=4, savefig=False,fig
             figname = f"./imgs/created/relation_{x}.pdf"
         f.savefig(figname, bbox_inches='tight')
     return f
-
 
 def preprocessing(Xf, yf, detect_outliers = False, convert_DT = False,
             create_features_props_over_cats = False, group_cat_prop=True,
