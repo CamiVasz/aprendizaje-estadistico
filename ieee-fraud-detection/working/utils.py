@@ -263,7 +263,7 @@ def preprocessing(Xf, yf, detect_outliers = False, convert_DT = False,
         # Define the new columns to be transformed
         cols = ['TransactionAmt']
 
-        ests = ['mean', 'std'] # or ['median', 'std']
+        ests = ['mean'] # or ['median', 'std']
 
         cats = ['card1', 'card2', 'card4', 'card6']
         cats = [*cats, 'M1', 'M2', 'M3', 'M4', 'M5', 'M6'] # Nan propagation?
