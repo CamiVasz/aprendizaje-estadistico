@@ -40,7 +40,7 @@ def read_train_transaction(nrows = 30000,folder_path = None,
     if not folder_path:
         folder_path = ''
         
-    file_path = folder_path + 'train_transaction.csv'
+    file_path = folder_path + 'train_val_transaction.csv'
 
     if not undersampling:
         train_transaction = pd.read_csv( file_path, nrows=nrows, index_col=0)
